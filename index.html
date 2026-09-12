@@ -94,7 +94,22 @@
     color:var(--stage-muted);
     text-wrap:balance;
   }
-
+  .cta-link{
+    display:inline-flex; align-items:center; gap:6px;
+    margin-top:16px;
+    padding:9px 16px;
+    border-radius:999px;
+    background:rgba(53,225,198,.12);
+    border:1px solid rgba(53,225,198,.35);
+    color:var(--lens);
+    font-family:var(--f-ui-ko);
+    font-size:.82rem;
+    text-decoration:none;
+    transition:background .2s ease, transform .1s ease;
+  }
+  .cta-link:hover{ background:rgba(53,225,198,.2); }
+  .cta-link:active{ transform:scale(.97); }
+  .cta-link svg{ width:13px; height:13px; }
   .device-wrap{ margin:30px 0 22px; }
   .phone{
     position:relative;
@@ -531,8 +546,11 @@
       Game Lens
     </div>
     <p>화면 레이아웃은 그대로, 낯선 일본어만 자연스러운 한국어로. 게임을 벗어나지 않고 그 자리에서 바로 이해해요.</p>
+    <a class="cta-link" href="/translate">
+      실제 번역 도구 써보기
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
   </header>
-
   <div class="device-wrap">
     <div class="phone">
       <div class="notch"></div>

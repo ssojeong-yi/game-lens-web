@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Game Lens Translate</title>
+<meta name="description" content="일본 모바일 게임 화면의 일본어를 자연스러운 한국어로 바꿔주는 Game Lens Translate">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Ccircle cx='13' cy='13' r='12' fill='%230B0E14'/%3E%3Cpath d='M13 4c3.5 1.6 5 4.6 5 9s-1.5 7.4-5 9c-3.5-1.6-5-4.6-5-9s1.5-7.4 5-9Z' fill='%2335E1C6' opacity='.9'/%3E%3Cpath d='M4 13c1.6-3.5 4.6-5 9-5s7.4 1.5 9 5c-1.6 3.5-4.6 5-9 5s-7.4-1.5-9-5Z' fill='%231E8C7C' opacity='.8'/%3E%3Ccircle cx='13' cy='13' r='2.6' fill='%230B0E14'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Manrope:wght@400;500;600;700&family=Jua&family=Gaegu:wght@400;700&display=swap">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0B0E14;
+    --panel:#12161F;
+    --panel-2:#171C27;
+    --line:#232939;
+    --text:#E9ECF3;
+    --muted:#8A93A6;
+    --muted-2:#5C6478;
+    --lens:#35E1C6;
+    --lens-dim:#1E8C7C;
+    --lens-glow:rgba(53,225,198,.35);
+    --amber:#F4B860;
+    --danger:#E8746A;
+
+    --f-display:'Sora',sans-serif;
+    --f-body:'Manrope',sans-serif;
+    --f-ko-ui:'Jua',sans-serif;
+    --f-ko-hand:'Gaegu',cursive;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--f-body);
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .page{
+    position:relative;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 18px 48px;
+    isolation:isolate;
+  }
+  .page::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:radial-gradient(var(--line) 1px, transparent 1px);
+    background-size:24px 24px;
+    -webkit-mask-image:radial-gradient(ellipse 65% 45% at 50% 20%, #000 0%, transparent 75%);
+            mask-image:radial-gradient(ellipse 65% 45% at 50% 20%, #000 0%, transparent 75%);
+    opacity:.55;
+    z-index:-1;
+  }
+
+  .brand{ text-align:center; max-width:420px; }
+  .brand .mark{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--f-display); font-weight:700; font-size:1.4rem;
+    letter-spacing:-0.01em;
+  }
+  .brand .mark svg{ width:24px; height:24px; flex:none; }
+  .brand p{
+    margin:10px 0 0; font-size:.9rem; line-height:1.55;
+    color:var(--muted); text-wrap:balance;
+  }
+
+  .card{
+    width:100%; max-width:420px;
+    margin-top:26px;
+  }
+
+  /* ---- upload zone ---- */
+  .dropzone{
+    position:relative;
+    border:1.5px dashed var(--line);
+    border-radius:20px;
+    background:var(--panel);
+    padding:36px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--lens-dim); background:var(--panel-2); }
+  .dropzone svg{ width:38px; height:38px; margin-bottom:10px; opacity:.85; }
+  .dropzone .title{ font-weight:600; font-size:.95rem; }
+  .dropzone .sub{ margin-top:4px; font-size:.78rem; color:var(--muted-2); }
+  .dropzone input{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+
+  /* ---- shot preview ---- */
+  .shot-card{ display:none; }
+  .shot-card.show{ display:block; }
+  .shot-wrap{
+    position:relative;
+    width:100%;
+    border-radius:18px;
+    overflow:hidden;
+    background:#000;
+    box-shadow:0 20px 50px -18px rgba(0,0,0,.6);
+  }
+  .shot-wrap img{ display:block; width:100%; height:auto; }
+
+  .overlay-layer{ position:absolute; inset:0; }
+  .overlay-layer.hidden{ display:none; }
+  .box{
+    position:absolute;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center;
+    border-radius:6px;
+    padding:2px 5px;
+    line-height:1.25;
+    overflow:hidden;
+    box-shadow:0 1px 4px rgba(0,0,0,.35);
+  }
+
+  .scan-veil{
+    position:absolute; inset:0;
+    background:rgba(6,9,15,.72);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px;
+    opacity:0; pointer-events:none;
+    transition:opacity .25s ease;
+  }
+  .scan-veil.show{ opacity:1; pointer-events:auto; }
+  .spinner{
+    width:34px; height:34px; border-radius:50%;
+    border:3px solid rgba(53,225,198,.25);
+    border-top-color:var(--lens);
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .spinner{ animation:spin .8s linear infinite; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+  }
+  .scan-veil .msg{ font-family:var(--f-ko-ui); font-size:.85rem; color:var(--text); text-align:center; padding:0 24px; }
+
+  .lens-toggle{
+    position:absolute; right:12px; bottom:12px;
+    width:52px; height:52px; border:none; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 32% 28%, #1c2430, #0c1119 70%);
+    box-shadow:0 8px 20px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.08) inset;
+    cursor:pointer;
+    opacity:0; transform:scale(.8); pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease, background .25s ease;
+  }
+  .lens-toggle.show{ opacity:1; transform:scale(1); pointer-events:auto; }
+  .lens-toggle svg{ width:26px; height:26px; transition:transform .4s ease; }
+  .lens-toggle.active{ background:radial-gradient(circle at 32% 28%, #143530, #0a1f1c 70%); }
+  .lens-toggle.active svg{ transform:rotate(28deg); }
+
+  .actions{ display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+  .btn{
+    border:none; border-radius:14px; padding:13px 18px;
+    font-family:var(--f-ko-ui); font-size:.92rem;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    cursor:pointer;
+    transition:opacity .2s ease, transform .1s ease;
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn-primary{ background:var(--lens); color:#06201b; }
+  .btn-primary[disabled]{ opacity:.5; cursor:default; }
+  .btn-ghost{
+    background:transparent; color:var(--muted);
+    border:1px solid var(--line);
+  }
+  .hint{
+    margin-top:10px; text-align:center; font-size:.72rem;
+    color:var(--muted-2); line-height:1.5;
+  }
+
+  .status-banner{
+    display:none;
+    margin-top:14px;
+    padding:11px 14px;
+    border-radius:12px;
+    background:rgba(232,116,106,.12);
+    border:1px solid rgba(232,116,106,.35);
+    color:#F3B6AF;
+    font-size:.82rem;
+    line-height:1.5;
+  }
+  .status-banner.show{ display:block; }
+
+  .footer-note{
+    max-width:400px; margin-top:30px;
+    text-align:center; font-size:.72rem; line-height:1.6;
+    color:var(--muted-2);
+  }
+
+  /* ---- text-input fallback mode ---- */
+  .text-mode{ display:none; }
+  .text-mode.show{ display:block; }
+  .text-card{
+    border:1.5px solid var(--line);
+    border-radius:20px;
+    background:var(--panel);
+    padding:16px;
+  }
+  .text-card textarea{
+    width:100%; min-height:130px; resize:vertical;
+    background:var(--panel-2); color:var(--text);
+    border:1px solid var(--line); border-radius:12px;
+    padding:12px; font-family:var(--f-body); font-size:.9rem; line-height:1.6;
+  }
+  .text-card textarea:focus{ outline:none; border-color:var(--lens-dim); }
+  .mode-note{
+    display:flex; align-items:center; gap:6px;
+    font-size:.72rem; color:var(--muted-2); margin-bottom:10px;
+  }
+  .mode-note svg{ width:14px; height:14px; flex:none; }
+
+  .result-list{ display:flex; flex-direction:column; gap:10px; margin-top:16px; }
+  .pair-card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:12px 14px;
+  }
+  .pair-card .ja{ font-size:.76rem; color:var(--muted); }
+  .pair-card .ko{ margin-top:4px; font-family:var(--f-ko-ui); font-size:1.05rem; }
+  .copy-all{ margin-top:12px; }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:.001ms !important;
+      transition-duration:.001ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="brand">
+    <div class="mark">
+      <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="13" cy="13" r="12" stroke="#35E1C6" stroke-width="1.6" opacity=".5"/>
+        <path d="M13 4c3.5 1.6 5 4.6 5 9s-1.5 7.4-5 9c-3.5-1.6-5-4.6-5-9s1.5-7.4 5-9Z" fill="#35E1C6" opacity=".9"/>
+        <path d="M4 13c1.6-3.5 4.6-5 9-5s7.4 1.5 9 5c-1.6 3.5-4.6 5-9 5s-7.4-1.5-9-5Z" fill="#1E8C7C" opacity=".8"/>
+        <circle cx="13" cy="13" r="2.6" fill="#0B0E14"/>
+      </svg>
+      Game Lens Translate
+    </div>
+    <p>플레이 중인 일본 게임 화면의 일본어를, 그 게임 맥락에 맞는 자연스러운 한국어로 바꿔드려요.</p>
+  </header>
+
+  <div class="card">
+    <div class="dropzone" id="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#8A93A6" stroke-width="1.6" aria-hidden="true">
+        <rect x="3" y="6" width="18" height="14" rx="2.5"/>
+        <path d="M8 6l1.6-2.5h4.8L16 6"/>
+        <circle cx="12" cy="13" r="3.4"/>
+      </svg>
+      <div class="title" id="dzTitle">탭해서 게임 스크린샷 올리기</div>
+      <div class="sub" id="dzSub">사진 보관함에서 선택하거나, 이 위에 끌어다 놓으세요</div>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="shot-card" id="shotCard">
+      <div class="shot-wrap" id="shotWrap">
+        <img id="shotImg" alt="업로드한 게임 스크린샷">
+        <div class="overlay-layer hidden" id="overlayLayer"></div>
+        <div class="scan-veil" id="scanVeil">
+          <div class="spinner"></div>
+          <div class="msg" id="scanMsg">일본어를 분석하고<br>자연스러운 한국어로 옮기는 중이에요…</div>
+        </div>
+        <button class="lens-toggle" id="lensToggle" type="button" aria-label="원문/번역 전환" aria-pressed="false">
+          <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path d="M16 5c4.5 2 6.4 5.8 6.4 11s-1.9 9-6.4 11c-4.5-2-6.4-5.8-6.4-11S11.5 7 16 5Z" fill="#35E1C6"/>
+            <path d="M5 16c2-4.5 5.8-6.4 11-6.4s9 1.9 11 6.4c-2 4.5-5.8 6.4-11 6.4S7 20.5 5 16Z" fill="#1E8C7C"/>
+            <circle cx="16" cy="16" r="3.2" fill="#0A1119"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="analyzeBtn" type="button">Game Lens로 번역하기</button>
+        <button class="btn btn-ghost" id="resetBtn" type="button">다른 스크린샷 올리기</button>
+      </div>
+      <p class="hint" id="analyzeHint">첫 사용 시 Claude 사용 허용 창이 한 번 떠요. 분석에는 보통 10~30초 정도 걸려요.</p>
+    </div>
+
+    <div class="text-mode" id="textMode">
+      <div class="mode-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#5C6478" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        이 화면에서는 이미지 업로드가 지원되지 않아, 텍스트를 직접 입력하는 방식으로 대신해드려요.
+      </div>
+      <div class="text-card">
+        <textarea id="jaInput" placeholder="게임 화면에 보이는 일본어를 한 줄씩 붙여넣어보세요.&#10;예)&#10;にっき&#10;おみやげ&#10;うみが みえる ばしょに いるみたい"></textarea>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="translateTextBtn" type="button">자연스러운 한국어로 바꾸기</button>
+      </div>
+      <p class="hint" id="textHint">첫 사용 시 Claude 사용 허용 창이 한 번 떠요.</p>
+      <div class="result-list" id="resultList"></div>
+      <button class="btn btn-ghost copy-all" id="copyAllBtn" type="button" style="display:none;">번역 전체 복사하기</button>
+    </div>
+
+    <div class="status-banner" id="statusBanner"></div>
+  </div>
+
+  <p class="footer-note">입력한 내용은 이 화면에서 사용자 본인의 Claude 계정으로만 분석되며, 자동 번역 결과이므로 간혹 오역이 있을 수 있어요.</p>
+</div>
+
+<script>
+(function(){
+  var dropzone = document.getElementById('dropzone');
+  var dzTitle = document.getElementById('dzTitle');
+  var dzSub = document.getElementById('dzSub');
+  var fileInput = document.getElementById('fileInput');
+  var shotCard = document.getElementById('shotCard');
+  var shotWrap = document.getElementById('shotWrap');
+  var shotImg = document.getElementById('shotImg');
+  var overlayLayer = document.getElementById('overlayLayer');
+  var scanVeil = document.getElementById('scanVeil');
+  var scanMsg = document.getElementById('scanMsg');
+  var lensToggle = document.getElementById('lensToggle');
+  var analyzeBtn = document.getElementById('analyzeBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var analyzeHint = document.getElementById('analyzeHint');
+  var statusBanner = document.getElementById('statusBanner');
+  var textMode = document.getElementById('textMode');
+  var jaInput = document.getElementById('jaInput');
+  var translateTextBtn = document.getElementById('translateTextBtn');
+  var textHint = document.getElementById('textHint');
+  var resultList = document.getElementById('resultList');
+  var copyAllBtn = document.getElementById('copyAllBtn');
+
+  var sample = null;
+  var currentFile = null;
+  var isBusy = false;
+  var hasResult = false;
+
+  function showBanner(msg){
+    statusBanner.textContent = msg;
+    statusBanner.classList.add('show');
+  }
+  function clearBanner(){
+    statusBanner.classList.remove('show');
+    statusBanner.textContent = '';
+  }
+
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+  function resetToUpload(){
+    currentFile = null;
+    hasResult = false;
+    fileInput.value = '';
+    shotCard.classList.remove('show');
+    dropzone.style.display = '';
+    overlayLayer.innerHTML = '';
+    overlayLayer.classList.add('hidden');
+    lensToggle.classList.remove('show','active');
+    lensToggle.setAttribute('aria-pressed','false');
+    analyzeBtn.style.display = '';
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = 'Game Lens로 번역하기';
+    clearBanner();
+  }
+
+  function onFileChosen(file){
+    if (!file || file.type.indexOf('image/') !== 0) return;
+    currentFile = file;
+    hasResult = false;
+    var url = URL.createObjectURL(file);
+    shotImg.src = url;
+    dropzone.style.display = 'none';
+    shotCard.classList.add('show');
+    overlayLayer.innerHTML = '';
+    overlayLayer.classList.add('hidden');
+    lensToggle.classList.remove('show','active');
+    analyzeBtn.style.display = '';
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = 'Game Lens로 번역하기';
+    clearBanner();
+  }
+
+  fileInput.addEventListener('change', function(){
+    if (fileInput.files && fileInput.files[0]) onFileChosen(fileInput.files[0]);
+  });
+
+  ['dragenter','dragover'].forEach(function(ev){
+    dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.remove('drag'); });
+  });
+  dropzone.addEventListener('drop', function(e){
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) onFileChosen(f);
+  });
+
+  resetBtn.addEventListener('click', resetToUpload);
+
+  var PROMPT = [
+    '다음은 사용자가 플레이 중인 일본 모바일 게임의 스크린샷입니다.',
+    '이미지 안에서 사람이 읽는 일본어 텍스트(메뉴, 버튼, 아이템 이름, 설명, 대사, 알림, 상태 표시 등)를 찾아주세요.',
+    '사전적인 직역이 아니라, 그 게임 UI 맥락에서 실제 한국 유저가 플레이하며 바로 이해할 수 있는 자연스러운 UX 라이팅으로 한국어 번역을 만들어주세요.',
+    '순수 로고나 그림으로만 된 제목, 숫자만 있는 값은 제외하세요.',
+    '',
+    '오직 아래 형식의 JSON 배열만 답하세요. 다른 설명 문장은 절대 포함하지 마세요. 최대 14개 항목까지만 포함하세요.',
+    '',
+    '[',
+    '  {',
+    '    "ja": "원본 일본어 텍스트",',
+    '    "ko": "자연스러운 한국어 번역",',
+    '    "x": 이미지 왼쪽 기준 텍스트 블록 좌측 끝의 가로 위치 (0-100 사이 백분율 숫자),',
+    '    "y": 이미지 위쪽 기준 텍스트 블록 상단의 세로 위치 (0-100 사이 백분율 숫자),',
+    '    "w": 텍스트 블록의 가로 폭 (0-100 사이 백분율 숫자),',
+    '    "h": 텍스트 블록의 세로 높이 (0-100 사이 백분율 숫자),',
+    '    "bg": "텍스트 바로 뒤 배경색과 가장 가까운 hex 색상 코드",',
+    '    "color": "원본 텍스트 색상과 가장 가까운 hex 색상 코드",',
+    '    "style": "handwritten 또는 ui 중 하나 (손글씨/캐주얼 느낌이면 handwritten, 딱딱한 버튼·라벨이면 ui)"',
+    '  }',
+    ']'
+  ].join('\n');
+
+  function errorMessage(code){
+    switch(code){
+      case 'not_granted': return '이 도구가 Claude를 사용하도록 허용되지 않았어요. 권한 요청 창에서 허용해 주세요.';
+      case 'images_unavailable': return '이 화면에서는 이미지 분석을 지원하지 않아요.';
+      case 'image_rejected': return '이 이미지를 읽을 수 없어요. 다른 스크린샷으로 다시 시도해 주세요.';
+      case 'rate_limited': return '요청이 많아요. 잠시 후 다시 시도해 주세요.';
+      case 'session_expired': return '다시 로그인한 뒤 시도해 주세요.';
+      case 'refused': return 'Claude가 이 이미지를 분석하지 못했어요. 다른 스크린샷으로 시도해 보세요.';
+      case 'empty_completion': return '분석 결과를 받지 못했어요. 다시 시도해 주세요.';
+      case 'invalid_json': return '번역 결과를 정리하는 데 실패했어요. 다시 시도해 주세요.';
+      case 'prompt_too_large': return '이미지 정보가 너무 커요. 다른 스크린샷으로 시도해 주세요.';
+      case 'sampling_disabled':
+      case 'not_declared':
+      case 'capability_disabled':
+      case 'capability_removed':
+        return '이 환경에서는 Game Lens 번역 기능을 사용할 수 없어요.';
+      default: return '문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+    }
+  }
+
+  function layoutBoxes(){
+    var rect = shotWrap.getBoundingClientRect();
+    var boxes = overlayLayer.querySelectorAll('.box');
+    for (var i=0;i<boxes.length;i++){
+      var b = boxes[i];
+      var hPct = parseFloat(b.getAttribute('data-h')) || 6;
+      var boxHeightPx = rect.height * (hPct/100);
+      var fontPx = clamp(boxHeightPx * 0.5, 10, 34);
+      b.style.fontSize = fontPx + 'px';
+    }
+  }
+
+  var ro = null;
+  function watchResize(){
+    if (ro) return;
+    if (typeof ResizeObserver !== 'undefined'){
+      ro = new ResizeObserver(layoutBoxes);
+      ro.observe(shotWrap);
+    } else {
+      window.addEventListener('resize', layoutBoxes);
+    }
+  }
+
+  function renderOverlay(regions){
+    overlayLayer.innerHTML = '';
+    if (!Array.isArray(regions)) return;
+    regions.slice(0,14).forEach(function(r){
+      if (!r || typeof r !== 'object') return;
+      var ko = String(r.ko || '').trim();
+      if (!ko) return;
+      var x = clamp(Number(r.x)||0, 0, 99);
+      var y = clamp(Number(r.y)||0, 0, 99);
+      var w = clamp(Number(r.w)||8, 2, 100-x);
+      var h = clamp(Number(r.h)||5, 2, 100-y);
+      var bg = /^#[0-9a-fA-F]{3,8}$/.test(r.bg) ? r.bg : 'rgba(10,14,20,.85)';
+      var color = /^#[0-9a-fA-F]{3,8}$/.test(r.color) ? r.color : '#F4F4F4';
+      var font = (r.style === 'handwritten') ? 'var(--f-ko-hand)' : 'var(--f-ko-ui)';
+
+      var el = document.createElement('div');
+      el.className = 'box';
+      el.setAttribute('data-h', h);
+      el.style.left = x + '%';
+      el.style.top = y + '%';
+      el.style.width = w + '%';
+      el.style.height = h + '%';
+      el.style.background = bg;
+      el.style.color = color;
+      el.style.fontFamily = font;
+      el.textContent = ko;
+      overlayLayer.appendChild(el);
+    });
+    watchResize();
+    requestAnimationFrame(layoutBoxes);
+  }
+
+  lensToggle.addEventListener('click', function(){
+    if (!hasResult) return;
+    var showing = !overlayLayer.classList.contains('hidden');
+    overlayLayer.classList.toggle('hidden', showing);
+    lensToggle.classList.toggle('active', !showing);
+    lensToggle.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  analyzeBtn.addEventListener('click', function(){
+    if (isBusy || !currentFile) return;
+    runAnalysis(currentFile);
+  });
+
+  function runAnalysis(file){
+    if (!sample){
+      showBanner('이 화면에서는 Claude 기능을 사용할 수 없어요. Claude 앱이나 claude.ai에서 이 링크를 열어주세요.');
+      return;
+    }
+    isBusy = true;
+    clearBanner();
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '분석 중…';
+    scanMsg.innerHTML = '일본어를 분석하고<br>자연스러운 한국어로 옮기는 중이에요…';
+    scanVeil.classList.add('show');
+
+    sample.json(PROMPT, { images: file, modelTier: 'default' }).then(function(regions){
+      renderOverlay(regions);
+      overlayLayer.classList.remove('hidden');
+      lensToggle.classList.add('show','active');
+      lensToggle.setAttribute('aria-pressed','true');
+      hasResult = true;
+      analyzeBtn.style.display = 'none';
+      analyzeHint.textContent = '아이콘을 탭하면 원문과 번역을 비교할 수 있어요.';
+    }).catch(function(e){
+      showBanner(errorMessage(e && e.code));
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = '다시 시도하기';
+    }).finally(function(){
+      isBusy = false;
+      scanVeil.classList.remove('show');
+    });
+  }
+
+  var textBusy = false;
+  var lastTranslated = [];
+
+  function buildTextPrompt(lines){
+    return [
+      '다음은 사용자가 플레이 중인 일본 모바일 게임 화면에서 그대로 옮겨 적은 일본어 텍스트 줄입니다.',
+      '각 줄을 게임 UI/UX 맥락에 맞는 자연스러운 한국어로 번역해주세요.',
+      '사전적인 직역이 아니라, 그 게임을 플레이하며 바로 이해할 수 있는 자연스러운 표현을 사용하세요.',
+      '',
+      '오직 아래 형식의 JSON 배열만 답하세요. 다른 설명 문장은 절대 포함하지 마세요.',
+      '입력한 줄의 개수와 순서를 그대로 유지하세요.',
+      '',
+      '[{"ja":"원문 줄","ko":"자연스러운 한국어 번역"}, ...]',
+      '',
+      '입력:',
+      lines.join('\n')
+    ].join('\n');
+  }
+
+  function renderResultList(pairs){
+    resultList.innerHTML = '';
+    lastTranslated = [];
+    if (!Array.isArray(pairs) || !pairs.length){
+      copyAllBtn.style.display = 'none';
+      return;
+    }
+    pairs.forEach(function(p){
+      if (!p || typeof p !== 'object') return;
+      var ja = String(p.ja || '').trim();
+      var ko = String(p.ko || '').trim();
+      if (!ko) return;
+      lastTranslated.push(ko);
+      var card = document.createElement('div');
+      card.className = 'pair-card';
+      var jaEl = document.createElement('div');
+      jaEl.className = 'ja';
+      jaEl.textContent = ja;
+      var koEl = document.createElement('div');
+      koEl.className = 'ko';
+      koEl.textContent = ko;
+      card.appendChild(jaEl);
+      card.appendChild(koEl);
+      resultList.appendChild(card);
+    });
+    copyAllBtn.style.display = lastTranslated.length ? '' : 'none';
+  }
+
+  function runTextTranslate(){
+    if (textBusy) return;
+    var lines = jaInput.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    if (!lines.length) return;
+    if (!sample){
+      showBanner('이 화면에서는 Claude 기능을 사용할 수 없어요. Claude 앱이나 claude.ai에서 이 링크를 열어주세요.');
+      return;
+    }
+    textBusy = true;
+    clearBanner();
+    translateTextBtn.disabled = true;
+    translateTextBtn.textContent = '번역하는 중…';
+
+    sample.json(buildTextPrompt(lines), { modelTier: 'default' }).then(function(pairs){
+      renderResultList(pairs);
+      textHint.textContent = '줄을 더 추가하거나 바꿔서 다시 번역할 수 있어요.';
+    }).catch(function(e){
+      showBanner(errorMessage(e && e.code));
+    }).finally(function(){
+      textBusy = false;
+      translateTextBtn.disabled = false;
+      translateTextBtn.textContent = '자연스러운 한국어로 바꾸기';
+    });
+  }
+
+  translateTextBtn.addEventListener('click', runTextTranslate);
+
+  copyAllBtn.addEventListener('click', function(){
+    if (!lastTranslated.length) return;
+    var text = lastTranslated.join('\n');
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        var prev = copyAllBtn.textContent;
+        copyAllBtn.textContent = '복사했어요';
+        setTimeout(function(){ copyAllBtn.textContent = prev; }, 1400);
+      }).catch(function(){});
+    }
+  });
+
+  function goUnavailable(){
+    dropzone.style.display = 'none';
+    textMode.classList.remove('show');
+    showBanner('이 화면에서는 Claude 기능을 사용할 수 없어요. Claude 앱이나 claude.ai에서 이 링크를 열어주세요.');
+  }
+
+  function init(){
+    try{
+      if (!window.claude || !window.claude.use){
+        goUnavailable();
+        return;
+      }
+      window.claude.use('sample').then(function(s){
+        sample = s;
+        if (!sample){
+          goUnavailable();
+          return;
+        }
+        sample.limits().then(function(caps){
+          if (caps && caps.images){
+            if (caps.images.mediaTypes && caps.images.mediaTypes.length){
+              fileInput.setAttribute('accept', caps.images.mediaTypes.join(','));
+            }
+          } else {
+            dropzone.style.display = 'none';
+            textMode.classList.add('show');
+          }
+        }).catch(function(){
+          dropzone.style.display = 'none';
+          textMode.classList.add('show');
+        });
+      }).catch(function(){
+        goUnavailable();
+      });
+    } catch(err){
+      goUnavailable();
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

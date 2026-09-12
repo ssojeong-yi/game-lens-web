@@ -68,7 +68,23 @@
     margin:10px 0 0; font-size:.9rem; line-height:1.55;
     color:var(--muted); text-wrap:balance;
   }
-
+  
+  .cta-link{
+    display:inline-flex; align-items:center; gap:6px;
+    margin-top:14px;
+    padding:8px 15px;
+    border-radius:999px;
+    background:rgba(53,225,198,.1);
+    border:1px solid rgba(53,225,198,.3);
+    color:var(--lens);
+    font-family:var(--f-ko-ui);
+    font-size:.78rem;
+    text-decoration:none;
+    transition:background .2s ease, transform .1s ease;
+  }
+  .cta-link:hover{ background:rgba(53,225,198,.18); }
+  .cta-link:active{ transform:scale(.97); }
+  
   .card{
     width:100%; max-width:420px;
     margin-top:26px;
@@ -246,6 +262,7 @@
       Game Lens Translate
     </div>
     <p>플레이 중인 일본 게임 화면의 일본어를, 그 게임 맥락에 맞는 자연스러운 한국어로 바꿔드려요.</p>
+    <a class="cta-link" href="/">← 인터랙티브 프로토타입 보기</a>
   </header>
 
   <div class="card">

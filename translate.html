@@ -222,6 +222,8 @@
   .pair-card .ko{ margin-top:4px; font-family:var(--f-ko-ui); font-size:1.05rem; }
   .copy-all{ margin-top:12px; }
 
+  #modeSwitchBtn{ width:100%; margin-top:14px; }
+
   @media (prefers-reduced-motion: reduce){
     *, *::before, *::after{
       animation-duration:.001ms !important;
@@ -279,13 +281,13 @@
         <button class="btn btn-primary" id="analyzeBtn" type="button">Game Lens로 번역하기</button>
         <button class="btn btn-ghost" id="resetBtn" type="button">다른 스크린샷 올리기</button>
       </div>
-      <p class="hint" id="analyzeHint">첫 사용 시 Claude 사용 허용 창이 한 번 떠요. 분석에는 보통 10~30초 정도 걸려요.</p>
+      <p class="hint" id="analyzeHint">분석에는 보통 5~20초 정도 걸려요.</p>
     </div>
 
     <div class="text-mode" id="textMode">
       <div class="mode-note">
         <svg viewBox="0 0 24 24" fill="none" stroke="#5C6478" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
-        이 화면에서는 이미지 업로드가 지원되지 않아, 텍스트를 직접 입력하는 방식으로 대신해드려요.
+        스크린샷 대신 텍스트를 직접 입력해서 번역할 수도 있어요.
       </div>
       <div class="text-card">
         <textarea id="jaInput" placeholder="게임 화면에 보이는 일본어를 한 줄씩 붙여넣어보세요.&#10;예)&#10;にっき&#10;おみやげ&#10;うみが みえる ばしょに いるみたい"></textarea>
@@ -293,15 +295,17 @@
       <div class="actions">
         <button class="btn btn-primary" id="translateTextBtn" type="button">자연스러운 한국어로 바꾸기</button>
       </div>
-      <p class="hint" id="textHint">첫 사용 시 Claude 사용 허용 창이 한 번 떠요.</p>
+      <p class="hint" id="textHint">여러 줄을 한 번에 넣어서 번역할 수 있어요.</p>
       <div class="result-list" id="resultList"></div>
       <button class="btn btn-ghost copy-all" id="copyAllBtn" type="button" style="display:none;">번역 전체 복사하기</button>
     </div>
 
+    <button class="btn btn-ghost" id="modeSwitchBtn" type="button">텍스트로 직접 입력할래요</button>
+
     <div class="status-banner" id="statusBanner"></div>
   </div>
 
-  <p class="footer-note">입력한 내용은 이 화면에서 사용자 본인의 Claude 계정으로만 분석되며, 자동 번역 결과이므로 간혹 오역이 있을 수 있어요.</p>
+  <p class="footer-note">입력한 내용은 이 웹사이트에 연결된 Anthropic API로 전송되어 번역되며, 자동 번역 결과이므로 간혹 오역이 있을 수 있어요.</p>
 </div>
 
 <script>
@@ -327,8 +331,8 @@
   var textHint = document.getElementById('textHint');
   var resultList = document.getElementById('resultList');
   var copyAllBtn = document.getElementById('copyAllBtn');
+  var modeSwitchBtn = document.getElementById('modeSwitchBtn');
 
-  var sample = null;
   var currentFile = null;
   var isBusy = false;
   var hasResult = false;
@@ -394,47 +398,59 @@
 
   resetBtn.addEventListener('click', resetToUpload);
 
-  var PROMPT = [
-    '다음은 사용자가 플레이 중인 일본 모바일 게임의 스크린샷입니다.',
-    '이미지 안에서 사람이 읽는 일본어 텍스트(메뉴, 버튼, 아이템 이름, 설명, 대사, 알림, 상태 표시 등)를 찾아주세요.',
-    '사전적인 직역이 아니라, 그 게임 UI 맥락에서 실제 한국 유저가 플레이하며 바로 이해할 수 있는 자연스러운 UX 라이팅으로 한국어 번역을 만들어주세요.',
-    '순수 로고나 그림으로만 된 제목, 숫자만 있는 값은 제외하세요.',
-    '',
-    '오직 아래 형식의 JSON 배열만 답하세요. 다른 설명 문장은 절대 포함하지 마세요. 최대 14개 항목까지만 포함하세요.',
-    '',
-    '[',
-    '  {',
-    '    "ja": "원본 일본어 텍스트",',
-    '    "ko": "자연스러운 한국어 번역",',
-    '    "x": 이미지 왼쪽 기준 텍스트 블록 좌측 끝의 가로 위치 (0-100 사이 백분율 숫자),',
-    '    "y": 이미지 위쪽 기준 텍스트 블록 상단의 세로 위치 (0-100 사이 백분율 숫자),',
-    '    "w": 텍스트 블록의 가로 폭 (0-100 사이 백분율 숫자),',
-    '    "h": 텍스트 블록의 세로 높이 (0-100 사이 백분율 숫자),',
-    '    "bg": "텍스트 바로 뒤 배경색과 가장 가까운 hex 색상 코드",',
-    '    "color": "원본 텍스트 색상과 가장 가까운 hex 색상 코드",',
-    '    "style": "handwritten 또는 ui 중 하나 (손글씨/캐주얼 느낌이면 handwritten, 딱딱한 버튼·라벨이면 ui)"',
-    '  }',
-    ']'
-  ].join('\n');
-
-  function errorMessage(code){
+  function errorMessage(code, serverMsg){
     switch(code){
-      case 'not_granted': return '이 도구가 Claude를 사용하도록 허용되지 않았어요. 권한 요청 창에서 허용해 주세요.';
-      case 'images_unavailable': return '이 화면에서는 이미지 분석을 지원하지 않아요.';
-      case 'image_rejected': return '이 이미지를 읽을 수 없어요. 다른 스크린샷으로 다시 시도해 주세요.';
-      case 'rate_limited': return '요청이 많아요. 잠시 후 다시 시도해 주세요.';
-      case 'session_expired': return '다시 로그인한 뒤 시도해 주세요.';
-      case 'refused': return 'Claude가 이 이미지를 분석하지 못했어요. 다른 스크린샷으로 시도해 보세요.';
+      case 'missing_api_key': return '서버에 Anthropic API 키가 설정되지 않았어요. Vercel 프로젝트의 환경 변수에 ANTHROPIC_API_KEY를 추가해 주세요.';
+      case 'invalid_body': return serverMsg || '요청 형식에 문제가 있어요.';
+      case 'anthropic_error': return serverMsg || '번역 요청이 거절됐어요. 잠시 후 다시 시도해 주세요.';
       case 'empty_completion': return '분석 결과를 받지 못했어요. 다시 시도해 주세요.';
       case 'invalid_json': return '번역 결과를 정리하는 데 실패했어요. 다시 시도해 주세요.';
-      case 'prompt_too_large': return '이미지 정보가 너무 커요. 다른 스크린샷으로 시도해 주세요.';
-      case 'sampling_disabled':
-      case 'not_declared':
-      case 'capability_disabled':
-      case 'capability_removed':
-        return '이 환경에서는 Game Lens 번역 기능을 사용할 수 없어요.';
-      default: return '문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+      case 'upstream_error': return '번역 서버 요청 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+      case 'method_not_allowed': return '요청 방식에 문제가 있어요.';
+      default: return serverMsg || '문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
     }
+  }
+
+  function resizeImageFile(file, maxSize){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+        var scale = Math.min(1, maxSize / Math.max(w, h));
+        var cw = Math.max(1, Math.round(w * scale));
+        var ch = Math.max(1, Math.round(h * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, cw, ch);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function(blob){
+          if (!blob){ reject(new Error('resize_failed')); return; }
+          var reader = new FileReader();
+          reader.onload = function(){
+            var base64 = String(reader.result).split(',')[1] || '';
+            resolve({ base64: base64, mediaType: 'image/jpeg' });
+          };
+          reader.onerror = function(){ reject(new Error('read_failed')); };
+          reader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('image_load_failed')); };
+      img.src = url;
+    });
+  }
+
+  function callTranslateApi(payload){
+    return fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(resp){
+      return resp.json().catch(function(){ return {}; }).then(function(data){
+        return { ok: resp.ok, data: data };
+      });
+    });
   }
 
   function layoutBoxes(){
@@ -506,10 +522,6 @@
   });
 
   function runAnalysis(file){
-    if (!sample){
-      showBanner('이 화면에서는 Claude 기능을 사용할 수 없어요. Claude 앱이나 claude.ai에서 이 링크를 열어주세요.');
-      return;
-    }
     isBusy = true;
     clearBanner();
     analyzeBtn.disabled = true;
@@ -517,42 +529,38 @@
     scanMsg.innerHTML = '일본어를 분석하고<br>자연스러운 한국어로 옮기는 중이에요…';
     scanVeil.classList.add('show');
 
-    sample.json(PROMPT, { images: file, modelTier: 'default' }).then(function(regions){
-      renderOverlay(regions);
-      overlayLayer.classList.remove('hidden');
-      lensToggle.classList.add('show','active');
-      lensToggle.setAttribute('aria-pressed','true');
-      hasResult = true;
-      analyzeBtn.style.display = 'none';
-      analyzeHint.textContent = '아이콘을 탭하면 원문과 번역을 비교할 수 있어요.';
-    }).catch(function(e){
-      showBanner(errorMessage(e && e.code));
-      analyzeBtn.disabled = false;
-      analyzeBtn.textContent = '다시 시도하기';
-    }).finally(function(){
-      isBusy = false;
-      scanVeil.classList.remove('show');
-    });
+    resizeImageFile(file, 1400)
+      .then(function(img){
+        return callTranslateApi({ mode: 'image', image: img.base64, mediaType: img.mediaType });
+      })
+      .then(function(res){
+        if (!res.ok){
+          showBanner(errorMessage(res.data && res.data.error, res.data && res.data.message));
+          analyzeBtn.disabled = false;
+          analyzeBtn.textContent = '다시 시도하기';
+          return;
+        }
+        renderOverlay(res.data.result);
+        overlayLayer.classList.remove('hidden');
+        lensToggle.classList.add('show','active');
+        lensToggle.setAttribute('aria-pressed','true');
+        hasResult = true;
+        analyzeBtn.style.display = 'none';
+        analyzeHint.textContent = '아이콘을 탭하면 원문과 번역을 비교할 수 있어요.';
+      })
+      .catch(function(){
+        showBanner('번역 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = '다시 시도하기';
+      })
+      .finally(function(){
+        isBusy = false;
+        scanVeil.classList.remove('show');
+      });
   }
 
   var textBusy = false;
   var lastTranslated = [];
-
-  function buildTextPrompt(lines){
-    return [
-      '다음은 사용자가 플레이 중인 일본 모바일 게임 화면에서 그대로 옮겨 적은 일본어 텍스트 줄입니다.',
-      '각 줄을 게임 UI/UX 맥락에 맞는 자연스러운 한국어로 번역해주세요.',
-      '사전적인 직역이 아니라, 그 게임을 플레이하며 바로 이해할 수 있는 자연스러운 표현을 사용하세요.',
-      '',
-      '오직 아래 형식의 JSON 배열만 답하세요. 다른 설명 문장은 절대 포함하지 마세요.',
-      '입력한 줄의 개수와 순서를 그대로 유지하세요.',
-      '',
-      '[{"ja":"원문 줄","ko":"자연스러운 한국어 번역"}, ...]',
-      '',
-      '입력:',
-      lines.join('\n')
-    ].join('\n');
-  }
 
   function renderResultList(pairs){
     resultList.innerHTML = '';
@@ -586,25 +594,28 @@
     if (textBusy) return;
     var lines = jaInput.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
     if (!lines.length) return;
-    if (!sample){
-      showBanner('이 화면에서는 Claude 기능을 사용할 수 없어요. Claude 앱이나 claude.ai에서 이 링크를 열어주세요.');
-      return;
-    }
     textBusy = true;
     clearBanner();
     translateTextBtn.disabled = true;
     translateTextBtn.textContent = '번역하는 중…';
 
-    sample.json(buildTextPrompt(lines), { modelTier: 'default' }).then(function(pairs){
-      renderResultList(pairs);
-      textHint.textContent = '줄을 더 추가하거나 바꿔서 다시 번역할 수 있어요.';
-    }).catch(function(e){
-      showBanner(errorMessage(e && e.code));
-    }).finally(function(){
-      textBusy = false;
-      translateTextBtn.disabled = false;
-      translateTextBtn.textContent = '자연스러운 한국어로 바꾸기';
-    });
+    callTranslateApi({ mode: 'text', lines: lines })
+      .then(function(res){
+        if (!res.ok){
+          showBanner(errorMessage(res.data && res.data.error, res.data && res.data.message));
+          return;
+        }
+        renderResultList(res.data.result);
+        textHint.textContent = '줄을 더 추가하거나 바꿔서 다시 번역할 수 있어요.';
+      })
+      .catch(function(){
+        showBanner('번역 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      })
+      .finally(function(){
+        textBusy = false;
+        translateTextBtn.disabled = false;
+        translateTextBtn.textContent = '자연스러운 한국어로 바꾸기';
+      });
   }
 
   translateTextBtn.addEventListener('click', runTextTranslate);
@@ -621,46 +632,36 @@
     }
   });
 
-  function goUnavailable(){
-    dropzone.style.display = 'none';
+  var inTextMode = false;
+
+  function showImageMode(){
+    inTextMode = false;
     textMode.classList.remove('show');
-    showBanner('이 화면에서는 Claude 기능을 사용할 수 없어요. Claude 앱이나 claude.ai에서 이 링크를 열어주세요.');
-  }
-
-  function init(){
-    try{
-      if (!window.claude || !window.claude.use){
-        goUnavailable();
-        return;
-      }
-      window.claude.use('sample').then(function(s){
-        sample = s;
-        if (!sample){
-          goUnavailable();
-          return;
-        }
-        sample.limits().then(function(caps){
-          if (caps && caps.images){
-            if (caps.images.mediaTypes && caps.images.mediaTypes.length){
-              fileInput.setAttribute('accept', caps.images.mediaTypes.join(','));
-            }
-          } else {
-            dropzone.style.display = 'none';
-            textMode.classList.add('show');
-          }
-        }).catch(function(){
-          dropzone.style.display = 'none';
-          textMode.classList.add('show');
-        });
-      }).catch(function(){
-        goUnavailable();
-      });
-    } catch(err){
-      goUnavailable();
+    if (currentFile){
+      shotCard.classList.add('show');
+      dropzone.style.display = 'none';
+    } else {
+      dropzone.style.display = '';
+      shotCard.classList.remove('show');
     }
+    modeSwitchBtn.textContent = '텍스트로 직접 입력할래요';
+    clearBanner();
   }
 
-  init();
+  function showTextMode(){
+    inTextMode = true;
+    dropzone.style.display = 'none';
+    shotCard.classList.remove('show');
+    textMode.classList.add('show');
+    modeSwitchBtn.textContent = '스크린샷으로 번역할래요';
+    clearBanner();
+  }
+
+  modeSwitchBtn.addEventListener('click', function(){
+    if (inTextMode) showImageMode(); else showTextMode();
+  });
+
+  showImageMode();
 })();
 </script>
 </body>
